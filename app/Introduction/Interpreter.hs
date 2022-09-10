@@ -50,8 +50,8 @@ interpExp =
       interpExp e
 
 interpIdentExp :: (MonadState Env m, MonadError EvalError m) => Ident -> m Int
-interpIdentExp ident = do
-  fromMaybe (throwError IdNotDefined) (M.lookup ident get)
+interpIdentExp ident = undefined {-do
+  fromMaybe (throwError IdNotDefined) (M.lookup ident get)-}
 
 interpOpExp :: (MonadState Env m, MonadError EvalError m) => Exp -> Exp -> BinOp -> m Int
 interpOpExp e1 e2 op = undefined
