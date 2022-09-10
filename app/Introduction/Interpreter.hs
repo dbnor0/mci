@@ -8,7 +8,7 @@ import           Data.Maybe (fromMaybe)
 import qualified Data.Text                  as T
 import           Introduction.Syntax
 
-type Env   = M.Map Ident Int
+type Env = M.Map Ident Int
 
 data EvalError
   = IdNotDefined
@@ -20,9 +20,10 @@ maxPrintArgs :: Stmt -> Int
 maxPrintArgs (CompoundStmt s1 s2) = max (maxPrintArgs s1) (maxPrintArgs s2)
 maxPrintArgs (AssignStmt _ e)     = expArgs e
 maxPrintArgs (PrintStmt es)       = max (length es) (maximum $ expArgs <$> es)
+maxPrintArgs NoOpStmt             = 0
 
 expArgs :: Exp -> Int
-expArgs (SeqExp p@(PrintStmt _) _) = maxPrintArgs p
+expArgs (SeqExp (p@(PrintStmt _), _)) = maxPrintArgs p
 expArgs _                          = 0
 
 interp :: Stmt -> IO ()
@@ -38,41 +39,31 @@ interpStmt =
       v <- interpExp e
       modify (M.insert id v)
     (PrintStmt es) -> undefined
+    NoOpStmt -> undefined
 
 interpExp :: (MonadState Env m, MonadError EvalError m) => Exp -> m Int
 interpExp =
   \case
     (IdentExp ident) -> interpIdentExp ident
     (NumExp n) -> return n
-    (OpExp e1 op e2) -> interpOpExp e1 e2 op
-    (SeqExp s e) -> do
+    (OpExp op e1 e2) -> interpOpExp op e1 e2
+    (SeqExp (s, e)) -> do
       interpStmt s
       interpExp e
 
 interpIdentExp :: (MonadState Env m, MonadError EvalError m) => Ident -> m Int
-interpIdentExp ident = undefined {-do
-  fromMaybe (throwError IdNotDefined) (M.lookup ident get)-}
+interpIdentExp ident = do
+  fromMaybe (throwError IdNotDefined) (M.lookup ident M.empty)
 
-interpOpExp :: (MonadState Env m, MonadError EvalError m) => Exp -> Exp -> BinOp -> m Int
-interpOpExp e1 e2 op = undefined
+interpOpExp :: (MonadState Env m, MonadError EvalError m) => BinOp -> Exp -> Exp -> m Int
+interpOpExp op e1 e2 = do
+  r1 <- interpExp e1
+  r2 <- interpExp e2
+  when (r2 == 0 && op == Div) (throwError DivisionByZero)
+  return $ interpOp op r1 r2
 
--- interpExp :: (MonadState Env m, MonadError T.Text m) => Exp -> m (Either T.Text Int)
--- interpExp =
---   \case 
---     (IdentExp ident) -> interpIdentExp ident
---     (NumExp n) -> return $ Right n
---     (OpExp e1 op e2) -> interpOpExp e1 e2 op
---     (SeqExp s e) -> do
---       interpStmt s
---       interpExp e
-
--- interpIdentExp :: (MonadState Env m, MonadError T.Text m) => Ident -> m (Either T.Text Int)
--- interpIdentExp = undefined
-
--- interpOpExp :: (MonadState Env m, MonadError T.Text m) => Exp -> Exp -> BinOp -> Eval Env Int
--- interpOpExp e1 e2 = do
---   v1 <- interpExp e1
---   v2 <- interpExp e2
---   -- case op of
---   --   Plus -> 
---   undefined
+interpOp :: BinOp -> (Int -> Int -> Int)
+interpOp Plus = (+)
+interpOp Minus = (-)
+interpOp Times = (*)
+interpOp Div = div

@@ -15,11 +15,13 @@ data Stmt
   = CompoundStmt Stmt Stmt
   | AssignStmt Ident Exp
   | PrintStmt [Exp]
+  | NoOpStmt
   deriving (Eq, Show)
 
 data Exp 
   = IdentExp Ident
   | NumExp Int
-  | OpExp Exp BinOp Exp
-  | SeqExp Stmt Exp
+  | OpExp BinOp Exp Exp
+  | SeqExp (Stmt, Exp)
   deriving (Eq, Show)
+  

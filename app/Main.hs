@@ -1,10 +1,12 @@
 module Main where
 
-import Introduction.Syntax
-import Introduction.Interpreter (maxPrintArgs)
-
+import qualified Data.Text.IO as T
+import           Introduction.Syntax
+import           Introduction.Interpreter (maxPrintArgs)
+import           Introduction.Parser (stmt, seqExpr, opExpr)
+import           Text.Megaparsec (runParser)
 
 main :: IO ()
 main = do
-  let prog = CompoundStmt (AssignStmt "a" (OpExp (NumExp 5) Plus (NumExp 3))) (CompoundStmt (AssignStmt "b" (SeqExp (PrintStmt [IdentExp "a", OpExp (IdentExp "a")  Minus (NumExp 1)]) (OpExp (NumExp 10) Times (IdentExp "a")))) (PrintStmt [IdentExp "b"]))
-  print $ maxPrintArgs prog
+  program <- T.readFile "program"
+  print $ runParser stmt "" program
