@@ -13,6 +13,7 @@ type Env = M.Map Ident Int
 data EvalError
   = IdNotDefined
   | DivisionByZero
+  deriving (Eq, Show)
 
 type Eval a = ExceptT EvalError (State Env) a
 
@@ -26,9 +27,6 @@ expArgs :: Exp -> Int
 expArgs (SeqExp (p@(PrintStmt _), _)) = maxPrintArgs p
 expArgs _                          = 0
 
-interp :: Stmt -> IO ()
-interp  = undefined
-
 interpStmt :: (MonadState Env m, MonadError EvalError m) => Stmt -> m ()
 interpStmt =
   \case
@@ -39,7 +37,7 @@ interpStmt =
       v <- interpExp e
       modify (M.insert id v)
     (PrintStmt es) -> undefined
-    NoOpStmt -> undefined
+    NoOpStmt -> return ()
 
 interpExp :: (MonadState Env m, MonadError EvalError m) => Exp -> m Int
 interpExp =
@@ -53,7 +51,10 @@ interpExp =
 
 interpIdentExp :: (MonadState Env m, MonadError EvalError m) => Ident -> m Int
 interpIdentExp ident = do
-  fromMaybe (throwError IdNotDefined) (M.lookup ident M.empty)
+  env <- get
+  case M.lookup ident env of
+    Nothing -> throwError IdNotDefined
+    Just v -> return v
 
 interpOpExp :: (MonadState Env m, MonadError EvalError m) => BinOp -> Exp -> Exp -> m Int
 interpOpExp op e1 e2 = do
