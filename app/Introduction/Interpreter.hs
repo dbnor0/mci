@@ -8,7 +8,19 @@ import           Data.Maybe (fromMaybe)
 import qualified Data.Text                  as T
 import           Introduction.Syntax
 
-type Env = M.Map Ident Int
+data Env = Env
+  { symbols :: M.Map Ident Int
+  , output :: T.Text
+  } deriving (Eq, Show)
+
+mkEnv :: Env
+mkEnv = Env { symbols = M.empty, output = "" }
+
+withSymbols :: M.Map Ident Int -> Env -> Env
+withSymbols s env = env { symbols = s }
+
+withOutput :: T.Text -> Env -> Env
+withOutput o env = env { output = o }
 
 data EvalError
   = IdNotDefined
@@ -35,8 +47,12 @@ interpStmt =
       interpStmt s2
     (AssignStmt id e) -> do
       v <- interpExp e
-      modify (M.insert id v)
-    (PrintStmt es) -> undefined
+      env <- get
+      modify (withSymbols (M.insert id v (symbols env)))
+    (PrintStmt es) -> do
+      logs <- gets output
+      vals <- traverse interpExp es
+      modify (withOutput (foldMap (T.pack . show) vals))
     NoOpStmt -> return ()
 
 interpExp :: (MonadState Env m, MonadError EvalError m) => Exp -> m Int
@@ -51,7 +67,7 @@ interpExp =
 
 interpIdentExp :: (MonadState Env m, MonadError EvalError m) => Ident -> m Int
 interpIdentExp ident = do
-  env <- get
+  env <- gets symbols
   case M.lookup ident env of
     Nothing -> throwError IdNotDefined
     Just v -> return v

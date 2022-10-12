@@ -27,7 +27,7 @@ printStmt :: Parser Stmt
 printStmt = PrintStmt <$> (reserved "print" *> parens (sepBy1 expr (reserved ",")))
 
 expr :: Parser Exp
-expr = backtrack [identExpr, numExpr, opExpr, seqExpr]
+expr = backtrack [opExpr, identExpr, numExpr, seqExpr]
 
 identExpr :: Parser Exp
 identExpr = IdentExp <$> identifier
@@ -42,7 +42,7 @@ opExpr
   `chainl1` multiplicativeExpr
 
 factor :: Parser Exp
-factor = try $ parens opExpr <|> numExpr
+factor = numExpr <|> identExpr <|> try (parens opExpr)
 
 additiveExpr :: Parser (Exp -> Exp -> Exp)
 additiveExpr = reserved "+" $> OpExp Plus
