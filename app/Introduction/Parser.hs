@@ -1,14 +1,15 @@
 module Introduction.Parser where
-import Text.Megaparsec
-import Data.Void
-import Data.Text hiding (foldl')
-import Introduction.Syntax (Exp (..), Ident, Stmt (AssignStmt, PrintStmt, CompoundStmt, NoOpStmt), BinOp (..))
-import Data.Char
-import Text.Megaparsec.Char.Lexer
-import Text.Megaparsec.Char (space1)
-import Control.Monad
-import Data.Functor (($>))
-import Data.Foldable
+
+import           Text.Megaparsec
+import           Data.Void
+import           Data.Text hiding (foldl')
+import           Introduction.Syntax
+import           Data.Char
+import           Text.Megaparsec.Char.Lexer
+import           Text.Megaparsec.Char (space1)
+import           Control.Monad
+import           Data.Functor (($>))
+import           Data.Foldable
 
 type Parser = Parsec Void Text
 
@@ -45,10 +46,10 @@ factor :: Parser Exp
 factor = numExpr <|> identExpr <|> try (parens opExpr)
 
 additiveExpr :: Parser (Exp -> Exp -> Exp)
-additiveExpr = reserved "+" $> OpExp Plus
+additiveExpr = reserved "+" $> OpExp Plus <|> reserved "-" $> OpExp Minus
 
 multiplicativeExpr :: Parser (Exp -> Exp -> Exp)
-multiplicativeExpr = reserved "*" $> OpExp Times
+multiplicativeExpr = reserved "*" $> OpExp Times <|> reserved "/" $> OpExp Div
 
 seqExpr :: Parser Exp
 seqExpr = SeqExp <$> parens ((,) <$> stmt <*> (reserved "," *> expr))

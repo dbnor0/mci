@@ -6,16 +6,13 @@ import           Introduction.Interpreter (maxPrintArgs, interpStmt, EvalError, 
 import           Introduction.Parser (stmt, seqExpr, opExpr)
 import           Text.Megaparsec (runParser)
 import qualified Data.Map as M
-import Control.Monad.State
-import Control.Monad.Except
+import           Control.Monad.State
+import           Control.Monad.Except
 
 interp :: Stmt -> Env
 interp ast = execState (runExceptT $ interpStmt ast) mkEnv
 
 main :: IO ()
 main = do
-  program <- T.readFile "program"
-  case runParser stmt "" program of
-    Left err -> print err
-    Right ast -> do
-      print $ interp ast
+  program <- T.readFile "./app/Introduction/examples/program"
+  either print (print . interp) (runParser stmt "" program)
