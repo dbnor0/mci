@@ -22,6 +22,7 @@ executable mci
     , containers
     , directory
     , megaparsec
+    , microlens-platform
     , mtl 
     , text
   hs-source-dirs:   app
