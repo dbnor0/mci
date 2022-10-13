@@ -9,6 +9,7 @@ executable mci
 
   other-modules:
     Introduction.Interpreter
+    Introduction.InterpreterIO
     Introduction.Parser
     Introduction.Syntax
 
