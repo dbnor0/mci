@@ -1,6 +1,6 @@
 module Introduction.Syntax where
 
-import           Data.Text
+import Data.Text
 
 type Ident = Text
 

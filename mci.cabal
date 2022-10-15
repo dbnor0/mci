@@ -12,6 +12,7 @@ executable mci
     Introduction.InterpreterIO
     Introduction.Parser
     Introduction.Syntax
+    Lexer.Lexer
 
   default-extensions:
     FlexibleContexts
@@ -20,6 +21,8 @@ executable mci
 
   build-depends:    
     base ^>=4.14.3.0
+    , array
+    , bytestring
     , containers
     , directory
     , megaparsec
