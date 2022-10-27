@@ -1,4 +1,4 @@
-module Introduction.Syntax where
+module Eval.Syntax where
 
 import Data.Text
 

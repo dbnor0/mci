@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Introduction.Interpreter where
+module Eval.Interpreter where
 
 import           Control.Monad.Except
 import           Control.Monad.Reader
@@ -8,7 +8,7 @@ import           Control.Monad.State.Strict
 import qualified Data.Map                   as M
 import           Data.Maybe (fromMaybe)
 import qualified Data.Text                  as T
-import           Introduction.Syntax
+import           Eval.Syntax
 import           Lens.Micro.Platform
 
 data Env = Env

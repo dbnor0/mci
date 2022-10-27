@@ -8,11 +8,11 @@ executable mci
   main-is:          Main.hs
 
   other-modules:
-    Introduction.Interpreter
-    Introduction.InterpreterIO
-    Introduction.Parser
-    Introduction.Syntax
-    Lexer.Lexer
+    Eval.Interpreter
+    Eval.InterpreterIO
+    Eval.Syntax
+    Parser.Parser
+    Syntax.Syntax
 
   default-extensions:
     FlexibleContexts

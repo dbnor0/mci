@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use newtype instead of data" #-}
 
-module Introduction.InterpreterIO where
+module Eval.InterpreterIO where
 
 import           Control.Monad.Except
 import           Control.Monad.Reader
@@ -11,9 +11,9 @@ import           Data.IORef
 import qualified Data.Map                   as M
 import           Data.Maybe (fromMaybe)
 import qualified Data.Text                  as T
-import           Introduction.Syntax
+import           Eval.Syntax
 import           Lens.Micro.Platform
-import Data.Foldable
+import           Data.Foldable
 
 
 data Env = Env
