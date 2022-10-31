@@ -8,11 +8,16 @@ executable mci
   main-is:          Main.hs
 
   other-modules:
+    Analysis.Environment
+    Analysis.Resolution
+    Analysis.TypeCheck
     Eval.Interpreter
     Eval.InterpreterIO
     Eval.Syntax
     Parser.Parser
     Syntax.Syntax
+    Syntax.Utils
+    Utils.Text
 
   default-extensions:
     FlexibleContexts
@@ -28,6 +33,7 @@ executable mci
     , megaparsec
     , microlens-platform
     , mtl 
+    , multi-containers
     , text
   hs-source-dirs:   app
   default-language: Haskell2010

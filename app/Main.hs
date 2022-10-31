@@ -5,6 +5,7 @@ import Parser.Parser
 import Data.ByteString.Lazy.Internal
 import Text.Megaparsec
 import Syntax.Syntax (Expr (..), Operator (..))
+import Analysis.Environment
 
 main :: IO ()
 main = do

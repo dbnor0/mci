@@ -1,0 +1,117 @@
+{-# LANGUAGE LambdaCase #-}
+
+module Analysis.Resolution where
+
+import Analysis.Environment
+import qualified Data.Text as T
+import qualified Syntax.Syntax as S
+import qualified Syntax.Utils as S
+import           Control.Monad.Except
+import           Control.Monad.Reader
+import Data.Containers.ListUtils
+import Syntax.Utils (rfieldVal)
+import Data.Foldable
+import Lens.Micro.Platform
+import Utils.Text
+
+data ResError
+  = DupRecFields S.Identifier [S.RecordField]
+  | DupAliasIds [S.Identifier]
+  | DupFnIds [S.Identifier]
+  | DupVarIds [S.Identifier]
+  | DupFnArgIds [S.Identifier]
+
+type TC a = ExceptT ResError (Reader Env) a
+
+uniqueIds :: (MonadError ResError m, MonadReader Env m) => S.Expr -> m ()
+uniqueIds =
+  \case
+    S.ArrayE _ size defaultValue ->
+      uniqueIds size
+      >> uniqueIds defaultValue
+    S.RecordE id fields -> do
+      unless (unique fieldNames)
+        (throwError $ "Record field names not unique in")
+      traverse_ uniqueIds fieldValues
+      where fieldNames = S.rfieldName <$> fields
+            fieldValues = S.rfieldVal <$> fields
+    S.NegE e -> uniqueIds e
+    S.OpE _ e1 e2 ->
+      uniqueIds e1
+      >> uniqueIds e2
+    S.ChainE es -> traverse_ uniqueIds es
+    S.FunctionCallE _ args -> traverse_ uniqueIds args
+    S.AssignmentE _ e -> uniqueIds e
+    S.IfE cond b1 b2 ->
+      uniqueIds cond
+      >> uniqueIds b1
+      >> maybe (return ()) uniqueIds b2
+    S.WhileE cond body ->
+      uniqueIds cond
+      >> uniqueIds body
+    S.ForE _ start end body -> 
+      uniqueIds start
+      >> uniqueIds end
+      >> uniqueIds body 
+    S.LetE decls exprs -> do
+      asks enterScope
+      unless (unique aliases)
+        (throwError "")
+      asks exitScope
+      traverse_ uniqueIds exprs
+      where aliases = decls >>= aliasIds
+            fns = decls >>= functionIds
+            vars = decls >>= varIds
+            fnArgs = decls <&> functionArgIds 
+    _ -> do
+      return ()
+{-
+
+  let 
+    type r = { x: int, y: int },
+    var x = 5,
+    var y = x,
+    type a = b,
+    function a(x: string, y: int): int =
+      let 
+        x = 6,
+        y = 1
+      in
+        for x in 1 to 10 do
+          (x := 5;)
+      end
+  in
+
+  end
+-}
+
+uniqueIdsLV :: (MonadError ResError m, MonadReader Env m) => S.LValue -> m ()
+uniqueIdsLV = 
+  \case
+    S.MemberAccessLV lv _ -> uniqueIdsLV lv
+    S.SubscriptLV lv e -> 
+      uniqueIdsLV lv 
+      >> uniqueIds e
+    _ -> return ()
+     
+
+aliasIds :: S.Decl -> [S.Identifier]
+aliasIds (S.TypeAliasDecl id _) = [id]
+aliasIds _                      = []
+
+functionIds :: S.Decl -> [S.Identifier]
+functionIds (S.FunctionDecl id _ _ _) = [id]
+functionIds (S.PrimitiveDecl id _ _ ) = [id]
+functionIds _                         = []
+
+functionArgIds :: S.Decl -> [S.Identifier]
+functionArgIds (S.FunctionDecl _ fields _ _) = S.tfieldName <$> fields
+functionArgIds (S.PrimitiveDecl _ fields _) = S.tfieldName <$> fields
+functionArgIds _ = []
+
+varIds :: S.Decl -> [S.Identifier]
+varIds (S.VarDecl id _ _) = [id]
+varIds _                  = []
+
+unique :: [S.Identifier] -> Bool
+unique ids = length ids == length (nubOrd ids)

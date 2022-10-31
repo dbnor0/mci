@@ -46,12 +46,14 @@ data LValue
 
 newtype Identifier
   = Identifier T.Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
+
+type TypeId = Int
 
 data Type
   = TypeIdentifier Identifier
-  | RecordType [TypeField]
-  | ArrayType Identifier
+  | RecordType [TypeField] TypeId
+  | ArrayType Identifier TypeId
   deriving (Eq, Show)
 
 data TypeField = 
@@ -72,3 +74,5 @@ data Operator
   | AndOp
   | OrOp
   deriving (Eq, Show)
+
+

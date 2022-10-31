@@ -187,10 +187,10 @@ type' = backtrack
   ]
 
 arrayType :: Parser Type
-arrayType = ArrayType <$> (reserved "array" *> reserved "of" *> identifier)
+arrayType = ArrayType <$> (reserved "array" *> reserved "of" *> identifier ) <*> pure 0
 
 recordType :: Parser Type
-recordType = RecordType <$> braces (sepBy typeField comma)
+recordType = RecordType <$> braces (sepBy typeField comma) <*> pure 0
 
 typeField :: Parser TypeField
 typeField = TypeField <$> (identifier <* colon) <*> identifier
@@ -262,6 +262,7 @@ chainl1 p op = do
       y <- p
       rest (f x y)
       <|> return x
+
 chainl1' :: Parser a -> Parser b -> Parser (a -> b -> a) -> Parser a
 chainl1' p1 p2 op = do
   x <- p1
