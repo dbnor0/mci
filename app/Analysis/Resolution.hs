@@ -15,8 +15,9 @@ import Data.Foldable
 import qualified Data.Map as M
 import Lens.Micro.Platform
 import Utils.Text
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, isJust)
 import Syntax.Syntax (Decl(VarDecl))
+import Data.List
 
 data ResError
   = DupRecFields [S.RecordField]
@@ -24,9 +25,16 @@ data ResError
   | DupFnIds [S.Identifier]
   | DupVarIds [S.Identifier]
   | DupFnArgIds [S.Identifier]
+  | UndefinedRef S.Identifier
+  | InvalidRecFields [S.Identifier] [S.Identifier]
   deriving (Eq, Show)
 
 type NameRes a = ExceptT ResError (Reader Env) a
+
+-- check that identifiers are unique on a scope basis
+-- check that references to identifiers are valid
+-- resolve type aliases to base types
+
 
 uniqueIds :: (MonadError ResError m, MonadReader Env m) => S.Expr -> m ()
 uniqueIds =
@@ -94,4 +102,82 @@ updateEnv = traverse_ (asks . insertToEnv)
 
 unique :: [S.Identifier] -> Bool
 unique ids = length ids == length (nubOrd ids)
-  
+
+validReferences :: (MonadError ResError m, MonadReader Env m) => S.Expr -> m ()
+validReferences =
+  \case
+    S.ArrayE (S.Identifier id) size defaultValue -> do
+      defined <- asks (isJust . lookupType id)
+      unless defined
+        (throwError $ UndefinedRef (S.Identifier id))
+      validReferences size
+      validReferences defaultValue
+    S.RecordE (S.Identifier id) rfields -> do
+      traverse_ validReferences (S.rfieldVal <$> rfields)
+      recType <- asks (lookupType id)
+      case recType of
+        Nothing -> throwError $ UndefinedRef (S.Identifier id)
+        Just (S.RecordType tfields _) -> do
+          unless (sort rnames == sort tnames)
+            (throwError $ InvalidRecFields tnames rnames)
+          where tnames = S.tfieldName <$> tfields
+                rnames = S.rfieldName <$> rfields
+        -- handled by typechecker
+        _ -> return ()
+    S.LValueE lv -> validReferencesLV lv
+    S.NegE e -> validReferences e
+    S.OpE _ e1 e2 ->
+      validReferences e1
+      >> validReferences e2
+    S.ChainE es -> traverse_ validReferences es
+    S.FunctionCallE (S.Identifier id) args -> do
+      defined <- asks (isJust . lookupFn id)
+      unless defined 
+          (throwError $ UndefinedRef (S.Identifier id))
+      traverse_ validReferences args
+    S.AssignmentE lv e -> 
+      validReferencesLV lv
+      >> validReferences e
+    S.IfE cond b1 b2 ->
+      validReferences cond
+      >> validReferences b1
+      >> maybe (return ()) validReferences b2
+    S.WhileE cond body ->
+      validReferences cond
+      >> validReferences body
+    S.ForE _ start end body ->
+      validReferences start
+      >> validReferences end
+      >> validReferences body
+    S.LetE decls exprs -> return ()
+    _ -> do
+      return ()
+
+{-
+
+  let 
+    type r1 = { x: int, y: int },
+    type r2 = { a: r1, b: string },
+    var x = r2{ a = r1{ x = 1, y = 2}, b = "yo" }
+  in
+    x = r2{ a = r1{ x = 1, y = 2}, b = "yo" }
+  end
+
+  lvalue 
+    ::= id
+    | lvalue . id
+    | 
+-}
+
+validReferencesLV :: (MonadError ResError m, MonadReader Env m) => S.LValue -> m ()
+validReferencesLV =
+  \case 
+    (S.IdentifierLV (S.Identifier id)) -> do
+      defined <- asks (isJust . lookupVar id)
+      unless defined 
+        (throwError $ UndefinedRef (S.Identifier id))
+    (S.MemberAccessLV lv id) -> do
+      defined <- 
+      validReferencesLV lv
+
+    (S.SubscriptLV lv e) -> return ()

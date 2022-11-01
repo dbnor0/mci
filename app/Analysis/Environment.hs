@@ -67,8 +67,8 @@ insertSym :: T.Text -> v -> SymbolTable v -> SymbolTable v
 insertSym _ _ (SymbolTable [])     = error "No scope present in symbol table"
 insertSym k v (SymbolTable (s:ss)) = SymbolTable (M.insert k v s:ss)
 
-lookupSym :: T.Text -> SymbolTable v -> Maybe v
-lookupSym k (SymbolTable ss) = foldl' (\found s -> found <|> M.lookup k s) Nothing ss
+lookupSym' :: T.Text -> SymbolTable v -> Maybe v
+lookupSym' k (SymbolTable ss) = foldl' (\found s -> found <|> M.lookup k s) Nothing ss
 
 lookupSymCurrent :: T.Text -> SymbolTable v -> Maybe v
 lookupSymCurrent _ (SymbolTable []) = error "No scope present in symbol table"
@@ -96,6 +96,15 @@ insertVar id t env = env & varEnv %~ insertSym id t
 
 insertFn :: T.Text -> [S.Type] -> S.Type -> Env -> Env
 insertFn id args r env = env & fnEnv %~ insertSym id (FnEntry args r)
+
+lookupType :: T.Text -> Env -> Maybe S.Type 
+lookupType t env = lookupSym' t (env ^. typeEnv) 
+
+lookupFn :: T.Text -> Env -> Maybe FnEntry 
+lookupFn t env = lookupSym' t (env ^. fnEnv) 
+
+lookupVar :: T.Text -> Env -> Maybe S.Type 
+lookupVar t env = lookupSym' t (env ^. varEnv) 
 
 unitType :: S.Type
 unitType = S.typeId "()"

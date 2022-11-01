@@ -115,7 +115,7 @@ typecheckExpr (S.LetE des exs) = do
 
 isDeclared :: (MonadError TCError m, MonadReader Env m) => S.Identifier -> m S.Type
 isDeclared (S.Identifier id) = do
-  idType <- asks (lookupSym id . _typeEnv)
+  idType <- asks (lookupSym' id . _typeEnv)
   case idType of
     Nothing -> throwError $ "Undefined type " <> showT id
     Just t -> return t  
@@ -130,7 +130,7 @@ getBaseType r@(S.RecordType _ _) = return r
 
 resolves :: (MonadError TCError m, MonadReader Env m) => S.Identifier -> m ()
 resolves (S.Identifier id) = do
-  idType <- asks (lookupSym id . _typeEnv)
+  idType <- asks (lookupSym' id . _typeEnv)
   case idType of
     Nothing -> throwError $ "Undefined type " <> showT id
     Just t@(S.TypeIdentifier ti@(S.Identifier id'))
