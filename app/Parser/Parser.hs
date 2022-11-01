@@ -17,11 +17,8 @@ type Parser = Parsec Void Text
 backtrack :: [Parser a] -> Parser a
 backtrack = choice . (<$>) try
 
-program :: Parser Program
-program = spaceOrComment *> backtrack
-  [ ExprP <$> expr
-  , DeclP <$> decls
-  ] <* eof
+program :: Parser Expr
+program = spaceOrComment *> expr <* eof
 
 expr :: Parser Expr
 expr = choice

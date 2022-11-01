@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Analysis.Resolution where
 
@@ -11,8 +12,11 @@ import           Control.Monad.Reader
 import Data.Containers.ListUtils
 import Syntax.Utils (rfieldVal)
 import Data.Foldable
+import qualified Data.Map as M
 import Lens.Micro.Platform
 import Utils.Text
+import Data.Maybe (catMaybes)
+import Syntax.Syntax (Decl(VarDecl))
 
 data ResError
   = DupRecFields [S.RecordField]
@@ -20,8 +24,9 @@ data ResError
   | DupFnIds [S.Identifier]
   | DupVarIds [S.Identifier]
   | DupFnArgIds [S.Identifier]
+  deriving (Eq, Show)
 
-type TC a = ExceptT ResError (Reader Env) a
+type NameRes a = ExceptT ResError (Reader Env) a
 
 uniqueIds :: (MonadError ResError m, MonadReader Env m) => S.Expr -> m ()
 uniqueIds =
@@ -48,49 +53,30 @@ uniqueIds =
     S.WhileE cond body ->
       uniqueIds cond
       >> uniqueIds body
-    S.ForE _ start end body -> 
+    S.ForE (S.Identifier id) start end body -> do
+      env <- ask
+      let currentIds = S.Identifier <$> id : M.keys (head $ env ^. (varEnv . runSymbolTable))
+      unless (unique currentIds) (throwError $ DupVarIds currentIds)
       uniqueIds start
       >> uniqueIds end
-      >> uniqueIds body 
+      >> uniqueIds body
     S.LetE decls exprs -> do
       asks enterScope
       ensureUnique decls
+      updateEnv decls
       asks exitScope
       traverse_ uniqueIds exprs
     _ -> do
       return ()
 
 uniqueIdsLV :: (MonadError ResError m, MonadReader Env m) => S.LValue -> m ()
-uniqueIdsLV = 
+uniqueIdsLV =
   \case
     S.MemberAccessLV lv _ -> uniqueIdsLV lv
-    S.SubscriptLV lv e -> 
-      uniqueIdsLV lv 
+    S.SubscriptLV lv e ->
+      uniqueIdsLV lv
       >> uniqueIds e
     _ -> return ()
-     
-
-aliasIds :: S.Decl -> [S.Identifier]
-aliasIds (S.TypeAliasDecl id _) = [id]
-aliasIds _                      = []
-
-functionIds :: S.Decl -> [S.Identifier]
-functionIds (S.FunctionDecl id _ _ _) = [id]
-functionIds (S.PrimitiveDecl id _ _ ) = [id]
-functionIds _                         = []
-
-functionArgIds :: S.Decl -> [S.Identifier]
-functionArgIds (S.FunctionDecl _ fields _ _) = S.tfieldName <$> fields
-functionArgIds (S.PrimitiveDecl _ fields _) = S.tfieldName <$> fields
-functionArgIds _ = []
-
-varIds :: S.Decl -> [S.Identifier]
-varIds (S.VarDecl id _ _) = [id]
-varIds _                  = []
-
-getIds :: [S.Decl] -> ([S.Identifier], [S.Identifier], [S.Identifier], [[[S.Identifier]]])
-getIds [] = []
-getIds _ = []
 
 ensureUnique :: (MonadError ResError m) => [S.Decl] -> m ()
 ensureUnique decls = do
@@ -98,19 +84,13 @@ ensureUnique decls = do
   unless (unique fns) (throwError $ DupFnIds fns)
   unless (unique vars) (throwError $ DupVarIds vars)
   traverse_ (\args -> unless (unique args) (throwError $ DupFnArgIds args)) fnArgs
-  where aliases = decls >>= aliasIds
-        fns = decls >>= functionIds
-        vars = decls >>= varIds
-        fnArgs = decls <&> functionArgIds 
+  where aliases = catMaybes $ getTypeId <$> decls
+        vars = catMaybes $ getVarId <$> decls
+        fns = catMaybes $ getFnId <$> decls
+        fnArgs = getArgIds <$> decls
 
 updateEnv :: (MonadReader Env m) => [S.Decl] -> m ()
-updateEnv decls = do
-  traverse_ (\asks (insertType Text Type Env)
-  where aliases = decls >>= aliasIds
-        fns = decls >>= functionIds
-        vars = decls >>= varIds
-        fnArgs = decls <&> functionArgIds 
-
+updateEnv = traverse_ (asks . insertToEnv)
 
 unique :: [S.Identifier] -> Bool
 unique ids = length ids == length (nubOrd ids)
