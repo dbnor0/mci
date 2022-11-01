@@ -155,12 +155,13 @@ validReferences =
 
 {-
 
-  let 
-    type r1 = { x: int, y: int },
-    type r2 = { a: r1, b: string },
-    var x = r2{ a = r1{ x = 1, y = 2}, b = "yo" }
+  let
+    type r1 = { z: int },
+    type r2 = { x: r1, y: int },
+    type r3 = { a: r2, b: string },
+    var x = r2{ a = r2{ x = r1{ z = 1 }, y = 2}, b = "yo" }
   in
-    x = r2{ a = r1{ x = 1, y = 2}, b = "yo" }
+    x.a.x = r1{ x = 1, y = 2}
   end
 
   lvalue 
