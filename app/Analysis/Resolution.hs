@@ -15,7 +15,7 @@ import Lens.Micro.Platform
 import Utils.Text
 
 data ResError
-  = DupRecFields S.Identifier [S.RecordField]
+  = DupRecFields [S.RecordField]
   | DupAliasIds [S.Identifier]
   | DupFnIds [S.Identifier]
   | DupVarIds [S.Identifier]
@@ -30,8 +30,7 @@ uniqueIds =
       uniqueIds size
       >> uniqueIds defaultValue
     S.RecordE id fields -> do
-      unless (unique fieldNames)
-        (throwError $ "Record field names not unique in")
+      unless (unique fieldNames) (throwError $ DupRecFields fields)
       traverse_ uniqueIds fieldValues
       where fieldNames = S.rfieldName <$> fields
             fieldValues = S.rfieldVal <$> fields
@@ -55,35 +54,11 @@ uniqueIds =
       >> uniqueIds body 
     S.LetE decls exprs -> do
       asks enterScope
-      unless (unique aliases)
-        (throwError "")
+      ensureUnique decls
       asks exitScope
       traverse_ uniqueIds exprs
-      where aliases = decls >>= aliasIds
-            fns = decls >>= functionIds
-            vars = decls >>= varIds
-            fnArgs = decls <&> functionArgIds 
     _ -> do
       return ()
-{-
-
-  let 
-    type r = { x: int, y: int },
-    var x = 5,
-    var y = x,
-    type a = b,
-    function a(x: string, y: int): int =
-      let 
-        x = 6,
-        y = 1
-      in
-        for x in 1 to 10 do
-          (x := 5;)
-      end
-  in
-
-  end
--}
 
 uniqueIdsLV :: (MonadError ResError m, MonadReader Env m) => S.LValue -> m ()
 uniqueIdsLV = 
@@ -113,5 +88,30 @@ varIds :: S.Decl -> [S.Identifier]
 varIds (S.VarDecl id _ _) = [id]
 varIds _                  = []
 
+getIds :: [S.Decl] -> ([S.Identifier], [S.Identifier], [S.Identifier], [[[S.Identifier]]])
+getIds [] = []
+getIds _ = []
+
+ensureUnique :: (MonadError ResError m) => [S.Decl] -> m ()
+ensureUnique decls = do
+  unless (unique aliases) (throwError $ DupAliasIds aliases)
+  unless (unique fns) (throwError $ DupFnIds fns)
+  unless (unique vars) (throwError $ DupVarIds vars)
+  traverse_ (\args -> unless (unique args) (throwError $ DupFnArgIds args)) fnArgs
+  where aliases = decls >>= aliasIds
+        fns = decls >>= functionIds
+        vars = decls >>= varIds
+        fnArgs = decls <&> functionArgIds 
+
+updateEnv :: (MonadReader Env m) => [S.Decl] -> m ()
+updateEnv decls = do
+  traverse_ (\asks (insertType Text Type Env)
+  where aliases = decls >>= aliasIds
+        fns = decls >>= functionIds
+        vars = decls >>= varIds
+        fnArgs = decls <&> functionArgIds 
+
+
 unique :: [S.Identifier] -> Bool
 unique ids = length ids == length (nubOrd ids)
+  
