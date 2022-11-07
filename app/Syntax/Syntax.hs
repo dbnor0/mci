@@ -1,6 +1,6 @@
 module Syntax.Syntax where
 
-import Data.Text as T
+import Data.Text                  as T
 import Data.ByteString.Lazy.Char8
 
 data Program

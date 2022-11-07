@@ -1,21 +1,21 @@
 {-# LANGUAGE TemplateHaskell #-}
+
 module Analysis.Environment where
 
-import qualified Data.Multimap as MM
-import qualified Data.Text as T
-import qualified Syntax.Syntax as S
-import qualified Syntax.Utils as S
-import qualified Data.Map as M
-import Lens.Micro.Platform
-import Control.Applicative
-import Data.Foldable (Foldable(foldl'))
-import Control.Monad
-import Data.Maybe (fromMaybe)
+import           Control.Applicative 
+import           Data.Foldable (foldl')
+import qualified Data.Map            as M
+import           Data.Maybe (fromMaybe)
+import qualified Data.Text           as T
+import           Lens.Micro.Platform
+import qualified Syntax.Syntax       as S
+import qualified Syntax.Utils        as S
 
 newtype SymbolTable a = SymbolTable { _runSymbolTable :: [M.Map T.Text a] }
   deriving (Eq, Show)
 
 makeLenses ''SymbolTable
+
 data FnEntry = FnEntry 
   { fnArgs :: [S.Type]
   , fnReturnType :: S.Type 
@@ -29,33 +29,38 @@ data Env = Env
 
 makeLenses ''Env
 
-class DeclId a where
-  getVarId :: a -> Maybe S.Identifier
-  getTypeId :: a -> Maybe S.Identifier
-  getFnId :: a -> Maybe S.Identifier
-  getArgIds :: a -> [S.Identifier]
-  insertToEnv :: a -> Env -> Env
+getExpr :: S.Decl -> Maybe S.Expr
+getExpr (S.VarDecl _ _ e) = Just e
+getExpr (S.FunctionDecl _ _ _ e) = Just e
+getExpr _ = Nothing
 
-instance DeclId S.Decl where
-  getVarId (S.VarDecl id _ _) = Just id
-  getVarId _ = Nothing
+getVarId :: S.Decl -> Maybe S.Identifier
+getVarId (S.VarDecl id _ _) = Just id
+getVarId _ = Nothing
 
-  getFnId (S.FunctionDecl id _ _ _) = Just id
-  getFnId (S.PrimitiveDecl id _ _) = Just id
-  getFnId _ = Nothing
+getFnId :: S.Decl -> Maybe S.Identifier
+getFnId (S.FunctionDecl id _ _ _) = Just id
+getFnId (S.PrimitiveDecl id _ _) = Just id
+getFnId _ = Nothing
 
-  getTypeId (S.TypeAliasDecl id _) = Just id
-  getTypeId _ = Nothing
+getTypeId :: S.Decl -> Maybe S.Identifier
+getTypeId (S.TypeAliasDecl id _) = Just id
+getTypeId _ = Nothing
 
-  getArgIds (S.FunctionDecl _ args _ _) = S.tfieldName <$> args
-  getArgIds (S.PrimitiveDecl _ args _) = S.tfieldName <$> args
-  getArgIds _ = []
+getArgIds :: S.Decl -> [S.Identifier]
+getArgIds (S.FunctionDecl _ args _ _) = S.tfieldName <$> args
+getArgIds (S.PrimitiveDecl _ args _) = S.tfieldName <$> args
+getArgIds _ = []
 
-  insertToEnv (S.VarDecl (S.Identifier id) t _) = insertVar id (S.TypeIdentifier $ fromMaybe (S.Identifier "()") t)
-  insertToEnv (S.FunctionDecl (S.Identifier id) args r _) = insertFn id (S.TypeIdentifier . S.tfieldType <$> args) (S.TypeIdentifier $ fromMaybe (S.Identifier "()") r) 
-  insertToEnv (S.PrimitiveDecl (S.Identifier id) args r) = insertFn id (S.TypeIdentifier . S.tfieldType <$> args) (S.TypeIdentifier $ fromMaybe (S.Identifier "()") r) 
-  insertToEnv (S.TypeAliasDecl (S.Identifier id) t) = insertType id t
-
+insertToEnv :: S.Decl -> Env -> Env
+insertToEnv =
+  \case
+    (S.VarDecl (S.Identifier id) t _) -> insertVar id (S.TypeIdentifier $ fromMaybe (S.Identifier "()") t)
+    (S.FunctionDecl (S.Identifier id) args r _) -> insertFn id (fnArgs args) (defaultType r) 
+    (S.PrimitiveDecl (S.Identifier id) args r) -> insertFn id (fnArgs args) (defaultType r) 
+    (S.TypeAliasDecl (S.Identifier id) t) -> insertType id t
+  where fnArgs = fmap (S.TypeIdentifier . S.tfieldType)
+        defaultType t = S.TypeIdentifier $ fromMaybe (S.Identifier "()") t
 
 enterScope' :: SymbolTable a -> SymbolTable a
 enterScope' st = st & runSymbolTable  %~ (M.empty :)
@@ -69,6 +74,13 @@ insertSym k v (SymbolTable (s:ss)) = SymbolTable (M.insert k v s:ss)
 
 lookupSym' :: T.Text -> SymbolTable v -> Maybe v
 lookupSym' k (SymbolTable ss) = foldl' (\found s -> found <|> M.lookup k s) Nothing ss
+
+getAllSyms :: Env -> [T.Text]
+getAllSyms env = fnSyms <> varSyms <> typeSyms
+  where fnSyms = getSyms $ env ^. fnEnv
+        varSyms = getSyms $ env ^. varEnv
+        typeSyms = getSyms $ env ^. typeEnv
+        getSyms st = foldr (\m r -> M.keys m <> r) [] (st ^. runSymbolTable) 
 
 lookupSymCurrent :: T.Text -> SymbolTable v -> Maybe v
 lookupSymCurrent _ (SymbolTable []) = error "No scope present in symbol table"

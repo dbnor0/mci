@@ -1,16 +1,15 @@
 module Parser.Parser where
 
-import           Text.Megaparsec
-import           Data.Void
-import           Data.Text as T hiding (foldr, foldl')
-import           Syntax.Syntax
-import           Data.Char
-import           Text.Megaparsec.Char.Lexer
-import           Text.Megaparsec.Char (space1, char)
-import           Control.Monad
-import           Data.Functor (($>), (<&>))
-import           Data.Foldable
-import Eval.Syntax (Exp (IdentExp), Stmt (NoOpStmt))
+import Control.Monad
+import Data.Char
+import Data.Foldable
+import Data.Functor (($>), (<&>))
+import Data.Text                  as T hiding (foldr, foldl')
+import Data.Void
+import Syntax.Syntax
+import Text.Megaparsec
+import Text.Megaparsec.Char.Lexer 
+import Text.Megaparsec.Char (space1, char)
 
 type Parser = Parsec Void Text
 

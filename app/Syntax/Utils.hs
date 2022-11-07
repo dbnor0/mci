@@ -1,7 +1,7 @@
 module Syntax.Utils where
 
-import qualified Data.Text as T
-import Syntax.Syntax
+import qualified Data.Text     as T
+import           Syntax.Syntax
 
 id :: T.Text -> Identifier
 id = Identifier

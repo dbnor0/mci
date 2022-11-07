@@ -1,23 +1,21 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Analysis.Resolution where
 
-import Analysis.Environment
-import qualified Data.Text as T
-import qualified Syntax.Syntax as S
-import qualified Syntax.Utils as S
+import           Analysis.Environment
 import           Control.Monad.Except
 import           Control.Monad.Reader
-import Data.Containers.ListUtils
-import Syntax.Utils (rfieldVal)
-import Data.Foldable
-import qualified Data.Map as M
-import Lens.Micro.Platform
-import Utils.Text
-import Data.Maybe (catMaybes, isJust)
-import Syntax.Syntax (Decl(VarDecl))
-import Data.List
+import           Control.Monad.State
+import           Data.Containers.ListUtils
+import           Data.Foldable
+import           Data.List
+import qualified Data.Map                  as M
+import           Data.Maybe
+import qualified Data.Text                 as T
+import           Lens.Micro.Platform
+import qualified Syntax.Syntax             as S
+import qualified Syntax.Utils              as S
 
 data ResError
   = DupRecFields [S.RecordField]
@@ -31,12 +29,7 @@ data ResError
 
 type NameRes a = ExceptT ResError (Reader Env) a
 
--- check that identifiers are unique on a scope basis
--- check that references to identifiers are valid
--- resolve type aliases to base types
-
-
-uniqueIds :: (MonadError ResError m, MonadReader Env m) => S.Expr -> m ()
+uniqueIds :: (MonadError ResError m, MonadState Env m) => S.Expr -> m ()
 uniqueIds =
   \case
     S.ArrayE _ size defaultValue ->
@@ -62,22 +55,19 @@ uniqueIds =
       uniqueIds cond
       >> uniqueIds body
     S.ForE (S.Identifier id) start end body -> do
-      env <- ask
+      env <- get
       let currentIds = S.Identifier <$> id : M.keys (head $ env ^. (varEnv . runSymbolTable))
       unless (unique currentIds) (throwError $ DupVarIds currentIds)
       uniqueIds start
       >> uniqueIds end
       >> uniqueIds body
     S.LetE decls exprs -> do
-      asks enterScope
       ensureUnique decls
-      updateEnv decls
-      asks exitScope
       traverse_ uniqueIds exprs
     _ -> do
       return ()
 
-uniqueIdsLV :: (MonadError ResError m, MonadReader Env m) => S.LValue -> m ()
+uniqueIdsLV :: (MonadError ResError m, MonadState Env m) => S.LValue -> m ()
 uniqueIdsLV =
   \case
     S.MemberAccessLV lv _ -> uniqueIdsLV lv
@@ -86,35 +76,37 @@ uniqueIdsLV =
       >> uniqueIds e
     _ -> return ()
 
-ensureUnique :: (MonadError ResError m) => [S.Decl] -> m ()
+ensureUnique :: (MonadError ResError m, MonadState Env m) => [S.Decl] -> m ()
 ensureUnique decls = do
   unless (unique aliases) (throwError $ DupAliasIds aliases)
   unless (unique fns) (throwError $ DupFnIds fns)
   unless (unique vars) (throwError $ DupVarIds vars)
   traverse_ (\args -> unless (unique args) (throwError $ DupFnArgIds args)) fnArgs
+  traverse_ uniqueIds exprs
   where aliases = catMaybes $ getTypeId <$> decls
         vars = catMaybes $ getVarId <$> decls
         fns = catMaybes $ getFnId <$> decls
         fnArgs = getArgIds <$> decls
+        exprs = catMaybes $ getExpr <$> decls
 
-updateEnv :: (MonadReader Env m) => [S.Decl] -> m ()
-updateEnv = traverse_ (asks . insertToEnv)
+updateEnv :: [S.Decl] -> Env -> Env
+updateEnv decls env = foldr insertToEnv env decls
 
 unique :: [S.Identifier] -> Bool
 unique ids = length ids == length (nubOrd ids)
 
-validReferences :: (MonadError ResError m, MonadReader Env m) => S.Expr -> m ()
+validReferences :: MonadError ResError m => MonadState Env m => S.Expr -> m ()
 validReferences =
   \case
     S.ArrayE (S.Identifier id) size defaultValue -> do
-      defined <- asks (isJust . lookupType id)
+      defined <- gets (isJust . lookupType id)
       unless defined
         (throwError $ UndefinedRef (S.Identifier id))
       validReferences size
       validReferences defaultValue
     S.RecordE (S.Identifier id) rfields -> do
       traverse_ validReferences (S.rfieldVal <$> rfields)
-      recType <- asks (lookupType id)
+      recType <- gets (lookupType id)
       case recType of
         Nothing -> throwError $ UndefinedRef (S.Identifier id)
         Just (S.RecordType tfields _) -> do
@@ -131,7 +123,8 @@ validReferences =
       >> validReferences e2
     S.ChainE es -> traverse_ validReferences es
     S.FunctionCallE (S.Identifier id) args -> do
-      defined <- asks (isJust . lookupFn id)
+      defined <- gets (isJust . lookupFn id)
+      syms <- gets getAllSyms
       unless defined 
           (throwError $ UndefinedRef (S.Identifier id))
       traverse_ validReferences args
@@ -149,36 +142,45 @@ validReferences =
       validReferences start
       >> validReferences end
       >> validReferences body
-    S.LetE decls exprs -> return ()
+    S.LetE decls exprs -> do
+      env <- get
+      modify enterScope
+      modify (\e -> foldr insertToEnv e decls)
+      traverse_ validReferencesDecl decls
+      traverse_ validReferences exprs
+      modify exitScope
     _ -> do
       return ()
 
-{-
+validReferencesDecl :: MonadError ResError m => MonadState Env m => S.Decl -> m ()
+validReferencesDecl =
+  \case 
+    (S.VarDecl _ varId e) -> do
+      validReferencesReturnType varId
+      validReferences e
+    (S.FunctionDecl id args r body) -> do
+      validReferencesReturnType r
+    (S.PrimitiveDecl id args r) -> do
+      validReferencesReturnType r
+    (S.TypeAliasDecl id t) -> return ()
 
-  let
-    type r1 = { z: int },
-    type r2 = { x: r1, y: int },
-    type r3 = { a: r2, b: string },
-    var x = r2{ a = r2{ x = r1{ z = 1 }, y = 2}, b = "yo" }
-  in
-    x.a.x = r1{ x = 1, y = 2}
-  end
+validReferencesReturnType :: MonadError ResError m => MonadState Env m => Maybe S.Identifier -> m ()
+validReferencesReturnType varId = do
+  case varId of
+    Nothing -> return ()
+    Just (S.Identifier id) -> do
+      defined <- gets (isJust . lookupType id)
+      unless defined 
+        (throwError $ UndefinedRef (S.Identifier id))
 
-  lvalue 
-    ::= id
-    | lvalue . id
-    | 
--}
-
-validReferencesLV :: (MonadError ResError m, MonadReader Env m) => S.LValue -> m ()
+validReferencesLV :: MonadError ResError m => MonadState Env m => S.LValue -> m ()
 validReferencesLV =
   \case 
     (S.IdentifierLV (S.Identifier id)) -> do
-      defined <- asks (isJust . lookupVar id)
+      defined <- gets (isJust . lookupVar id)
       unless defined 
         (throwError $ UndefinedRef (S.Identifier id))
-    (S.MemberAccessLV lv id) -> do
-      defined <- 
+    (S.MemberAccessLV lv id) -> validReferencesLV lv      
+    (S.SubscriptLV lv e) ->
       validReferencesLV lv
-
-    (S.SubscriptLV lv e) -> return ()
+      >> validReferences e

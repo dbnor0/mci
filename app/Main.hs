@@ -1,21 +1,22 @@
 module Main where
 
-import Data.Text.IO as T (readFile)
+import Analysis.Environment 
+import Analysis.Resolution (ResError, uniqueIds, validReferences)
+import Control.Monad.Except (runExceptT, MonadError)
+import Control.Monad.State (execState, evalState, MonadState, modify)
+import Data.Text.IO         as T (readFile)
 import Parser.Parser
-import Data.ByteString.Lazy.Internal
+import Syntax.Syntax        as S
 import Text.Megaparsec
-import Syntax.Syntax (Expr (..), Operator (..))
-import Analysis.Environment
-import Control.Monad.Reader (ReaderT(runReaderT), runReader)
-import Analysis.Resolution (NameRes, uniqueIds, ResError)
-import Control.Monad.Except (runExceptT)
 
-validate :: Expr -> Either ResError ()
-validate prg = runReader (runExceptT (uniqueIds prg)) prelude
+run :: (MonadError ResError m, MonadState Env m) => Expr -> m ()
+run prg = do
+  uniqueIds prg
+  validReferences prg
 
 main :: IO ()
 main = do
   p <- T.readFile "./examples/program"
   case runParser program "" p of
     Left err -> print err
-    Right e -> print $ validate e
+    Right e -> print $ evalState (runExceptT (run e)) prelude

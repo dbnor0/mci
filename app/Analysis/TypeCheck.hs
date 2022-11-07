@@ -1,24 +1,24 @@
 
 module Analysis.TypeCheck where
 
-import Analysis.Environment
-import qualified Data.Text as T
-import qualified Syntax.Syntax as S
-import qualified Syntax.Utils as S
+import           Analysis.Environment 
+import qualified Data.Text            as T
+import qualified Syntax.Syntax        as S
+import qualified Syntax.Utils         as S
 import           Control.Monad.Except
 import           Control.Monad.Reader
-import Utils.Text
-import Lens.Micro.Platform
-import Data.Foldable
-import Syntax.Syntax (Type(ArrayType))
-import qualified Data.Map as M
-import Syntax.Utils (typeId)
+import           Utils.Text
+import           Lens.Micro.Platform
+import           Data.Foldable
+import qualified Data.Map             as M
+import           Syntax.Utils (typeId)
+import           Control.Monad.State
 
 
 type TCError = T.Text
 type TC a = ExceptT TCError (Reader Env) a
 
-typecheckExpr :: (MonadError TCError m, MonadReader Env m) => S.Expr -> m S.Type
+typecheckExpr :: (MonadError TCError m, MonadState Env m) => S.Expr -> m S.Type
 typecheckExpr S.NilE = return nilType
 typecheckExpr (S.IntE _) = return intType
 typecheckExpr (S.StringE _) = return stringType
@@ -47,7 +47,7 @@ typecheckExpr (S.OpE op  e1 e2)
 typecheckExpr (S.ArrayE id _ defaultValue) = do
   arrType <- (getBaseType <=< isDeclared) id
   case arrType of
-    (ArrayType arrId _) -> do
+    (S.ArrayType arrId _) -> do
       dvType <- typecheckExpr defaultValue
       nestedType <- getBaseType (S.TypeIdentifier arrId)
       unless (dvType == nestedType)
@@ -55,12 +55,6 @@ typecheckExpr (S.ArrayE id _ defaultValue) = do
       return arrType
     t -> throwError $ "Expected array type, got " <> showT t
 -- Need scopes
--- type z = { a : int, b : string }
--- type x = { a : int, b : string }
--- type y = x
--- var n = z{ a = 5, b = "7" }
---
-
 typecheckExpr (S.RecordE id fields) = do
   recordType <- (getBaseType <=< isDeclared) id
   case recordType of
@@ -113,14 +107,14 @@ typecheckExpr S.BreakE = return unitType
 typecheckExpr (S.LetE des exs) = do
   return undefined
 
-isDeclared :: (MonadError TCError m, MonadReader Env m) => S.Identifier -> m S.Type
+isDeclared :: (MonadError TCError m, MonadState Env m) => S.Identifier -> m S.Type
 isDeclared (S.Identifier id) = do
-  idType <- asks (lookupSym' id . _typeEnv)
+  idType <- gets (lookupSym' id . _typeEnv)
   case idType of
     Nothing -> throwError $ "Undefined type " <> showT id
     Just t -> return t  
 
-getBaseType :: (MonadError TCError m, MonadReader Env m) => S.Type -> m S.Type
+getBaseType :: (MonadError TCError m, MonadState Env m) => S.Type -> m S.Type
 getBaseType t@(S.TypeIdentifier (S.Identifier id'))
   | isPrimitive id' = return t
   | otherwise = getBaseType t
@@ -128,9 +122,9 @@ getBaseType t@(S.TypeIdentifier (S.Identifier id'))
 getBaseType a@(S.ArrayType _ _) = return a
 getBaseType r@(S.RecordType _ _) = return r
 
-resolves :: (MonadError TCError m, MonadReader Env m) => S.Identifier -> m ()
+resolves :: (MonadError TCError m, MonadState Env m) => S.Identifier -> m ()
 resolves (S.Identifier id) = do
-  idType <- asks (lookupSym' id . _typeEnv)
+  idType <- gets (lookupSym' id . _typeEnv)
   case idType of
     Nothing -> throwError $ "Undefined type " <> showT id
     Just t@(S.TypeIdentifier ti@(S.Identifier id'))
@@ -141,7 +135,7 @@ resolves (S.Identifier id) = do
     Just r@(S.RecordType fields _) ->
       traverse_ resolves (S.tfieldType <$> fields)
 
-typecheckLValue :: (MonadError TCError m, MonadReader Env m) => S.LValue -> m S.Type
+typecheckLValue :: (MonadError TCError m, MonadState Env m) => S.LValue -> m S.Type
 -- Need scopes
 typecheckLValue (S.IdentifierLV iden) = do
   return undefined
